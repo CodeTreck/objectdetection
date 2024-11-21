@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, Text, Dimensions, PixelRatio, FlatList } from 'react-native';
+import { StyleSheet, View, Text, Dimensions, PixelRatio, FlatList, Button } from 'react-native';
 import {
   Camera,
   useCameraDevice,
@@ -17,6 +17,7 @@ export default function App(): React.ReactNode {
   const screenWidthPixelsRounded = Math.round(screenWidthPixels);
   const screenHeightPixelsRounded = Math.round(screenHeightPixels);
 
+  const [isScanning, setIsScanning] = React.useState(false); // Scanning state
   const [boxes, setBoxes] = React.useState<
     { x: number; y: number; width: number; height: number; corners: {} }[]
   >([]);
@@ -31,51 +32,59 @@ export default function App(): React.ReactNode {
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'ean-13'],
     onCodeScanned: (codes, frame) => {
+      if(isScanning){
       if (timerRef.current) {
         clearTimeout(timerRef.current); // Reset timer on each call
       }
 
-      if (codes.length > 0) {
-        const startTime = Date.now();
-
-        // Update the bounding boxes for the current frame
-        const newBoxes = codes.map((code) => {
-          const corners: any = code.corners.reduce((acc, corner, index) => {
-            acc[`point${index + 1}x`] = corner.x * screenWidthPixelsRounded / frame.height;
-            acc[`point${index + 1}y`] = corner.y * screenHeightPixelsRounded / frame.width;
-            return acc;
-          }, {});
-          const x = (code.frame.x * screenWidthPixelsRounded) / frame.height;
-          const y = (code.frame.y * screenHeightPixelsRounded) / frame.width;
-          const width = ((code.frame.width * screenWidthPixelsRounded) / frame.height);
-          const height = (code.frame.height * screenHeightPixelsRounded) / frame.width;
-
-          return {
-            x: x / pixelRatio,
-            y: y / pixelRatio,
-            width: width / pixelRatio,
-            height: height / pixelRatio,
-            corners: corners,
-          };
-        });
-
-        setBoxes(newBoxes);
-
-        const currentFrameValues = codes
-          .map((code) => ({
-            value: code.value,
-            scanTime: Date.now() - startTime,
-          }))
-          .filter((data) => data.value !== undefined && data.value !== null);
-
-        setUniqueCodes(currentFrameValues);
-
-        // Restart the timer to clear boxes if no new QR codes are detected
-        timerRef.current = setTimeout(() => {
+        if (codes.length > 0) {
+          const startTime = Date.now();
+  
+          // Update the bounding boxes for the current frame
+          const newBoxes = codes.map((code) => {
+            const corners: any = code.corners.reduce((acc, corner, index) => {
+              acc[`point${index + 1}x`] = corner.x * screenWidthPixelsRounded / frame.height;
+              acc[`point${index + 1}y`] = corner.y * screenHeightPixelsRounded / frame.width;
+              return acc;
+            }, {});
+            const x = (code.frame.x * screenWidthPixelsRounded) / frame.height;
+            const y = (code.frame.y * screenHeightPixelsRounded) / frame.width;
+            const width = ((code.frame.width * screenWidthPixelsRounded) / frame.height);
+            const height = (code.frame.height * screenHeightPixelsRounded) / frame.width;
+  
+            return {
+              x: x / pixelRatio,
+              y: y / pixelRatio,
+              width: width / pixelRatio,
+              height: height / pixelRatio,
+              corners: corners,
+            };
+          });
+  
+          setBoxes(newBoxes);
+  
+          const currentFrameValues = codes
+            .map((code) => ({
+              value: code.value,
+              scanTime: Date.now() - startTime,
+            }))
+            .filter((data) => data.value !== undefined && data.value !== null);
+  
+          setUniqueCodes(currentFrameValues);
+  
+          // Restart the timer to clear boxes if no new QR codes are detected
+          timerRef.current = setTimeout(() => {
+            setBoxes([]);
+            setUniqueCodes([]);
+          }, 300); // 300ms timeout
+        }
+        else{
           setBoxes([]);
           setUniqueCodes([]);
-        }, 300); // 300ms timeout
+
+        }
       }
+
     },
   });
 
@@ -98,24 +107,25 @@ export default function App(): React.ReactNode {
           codeScanner={codeScanner}
         />
       ) : (
-        <Text>No Camera available.</Text>
+        <Text>No Camera available or scanning is stopped.</Text>
       )}
 
-      {/* Render the square */}
-      {boxes.map((box, index) => (
-        <View
-          key={index}
-          style={[
-            styles.box,
-            {
-              left: box.x,
-              top: box.y,
-              width: box.width,
-              height: box.height,
-            },
-          ]}
-        />
-      ))}
+      {/* Render the bounding boxes */}
+      {
+        boxes.map((box, index) => (
+          <View
+            key={index}
+            style={[
+              styles.box,
+              {
+                left: box.x,
+                top: box.y,
+                width: box.width,
+                height: box.height,
+              },
+            ]}
+          />
+        ))}
 
       {/* White overlay for unique codes */}
       <View style={styles.overlay}>
@@ -130,6 +140,30 @@ export default function App(): React.ReactNode {
             </View>
           )}
         />
+        {/* Start and Stop Buttons */}
+        {/* <View style={styles.buttonRow}>
+          <Button
+            title="Start"
+            onPress={() => setIsScanning(true)}
+            disabled={isScanning} // Disable the Start button if already scanning
+          />
+          <Button
+            title="Stop"
+            onPress={() => {
+              setIsScanning(false);
+              setBoxes([]);
+              setUniqueCodes([]);
+            }}
+            disabled={!isScanning} // Disable the Stop button if not scanning
+          />
+        </View> */}
+        <View style={styles.buttonRow}>
+          {isScanning ? (
+            <Button title="Stop" onPress={() => setIsScanning(false)} />
+          ) : (
+            <Button title="Start" onPress={() => setIsScanning(true)} />
+          )}
+        </View>
       </View>
     </View>
   );
@@ -182,5 +216,9 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     color: 'gray',
   },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 10,
+  },
 });
-
