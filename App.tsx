@@ -2,11 +2,12 @@ import React from 'react';
 import { StyleSheet, View, Text, Dimensions, PixelRatio, FlatList, Button } from 'react-native';
 import {
   Camera,
+  Point,
   useCameraDevice,
   useCameraPermission,
   useCodeScanner,
 } from 'react-native-vision-camera';
-
+import { Svg, Path, Circle } from 'react-native-svg';
 export default function App(): React.ReactNode {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
@@ -19,7 +20,7 @@ export default function App(): React.ReactNode {
 
   const [isScanning, setIsScanning] = React.useState(false); // Scanning state
   const [boxes, setBoxes] = React.useState<
-    { x: number; y: number; width: number; height: number; corners: {} }[]
+    { polygonPath: string, corners: Point[] }[]
   >([]);
 
   const [uniqueCodes, setUniqueCodes] = React.useState<
@@ -32,56 +33,48 @@ export default function App(): React.ReactNode {
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'ean-13'],
     onCodeScanned: (codes, frame) => {
-      if(isScanning){
-      if (timerRef.current) {
-        clearTimeout(timerRef.current); // Reset timer on each call
-      }
+      if (isScanning) {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current); // Reset timer on each call
+        }
 
         if (codes.length > 0) {
           const startTime = Date.now();
-  
+          console.log(codes.length);
           // Update the bounding boxes for the current frame
           const newBoxes = codes.map((code) => {
-            const corners: any = code.corners.reduce((acc, corner, index) => {
-              acc[`point${index + 1}x`] = corner.x * screenWidthPixelsRounded / frame.height;
-              acc[`point${index + 1}y`] = corner.y * screenHeightPixelsRounded / frame.width;
-              return acc;
-            }, {});
-            const x = (code.frame.x * screenWidthPixelsRounded) / frame.height;
-            const y = (code.frame.y * screenHeightPixelsRounded) / frame.width;
-            const width = ((code.frame.width * screenWidthPixelsRounded) / frame.height);
-            const height = (code.frame.height * screenHeightPixelsRounded) / frame.width;
-  
+            const polygonPath = code.corners
+              .map((vertex) => `${(vertex.x * screenWidthPixelsRounded / frame.height) / pixelRatio},${(vertex.y * screenHeightPixelsRounded / frame.width) / pixelRatio} `)
+              .join(' ');
+            const corners = code.corners
+              .map((corner) => {
+                return {
+                  x: (corner.x * screenWidthPixelsRounded / frame.height) / pixelRatio,
+                  y: (corner.y * screenHeightPixelsRounded / frame.width) / pixelRatio
+                }
+              })
             return {
-              x: x / pixelRatio,
-              y: y / pixelRatio,
-              width: width / pixelRatio,
-              height: height / pixelRatio,
+              polygonPath: polygonPath,
               corners: corners,
             };
           });
-  
+          console.log(JSON.stringify(newBoxes));
           setBoxes(newBoxes);
-  
+
           const currentFrameValues = codes
             .map((code) => ({
               value: code.value,
               scanTime: Date.now() - startTime,
             }))
             .filter((data) => data.value !== undefined && data.value !== null);
-  
+
           setUniqueCodes(currentFrameValues);
-  
+
           // Restart the timer to clear boxes if no new QR codes are detected
           timerRef.current = setTimeout(() => {
             setBoxes([]);
             setUniqueCodes([]);
-          }, 300); // 300ms timeout
-        }
-        else{
-          setBoxes([]);
-          setUniqueCodes([]);
-
+          }, 200); // 300ms timeout
         }
       }
 
@@ -109,25 +102,11 @@ export default function App(): React.ReactNode {
       ) : (
         <Text>No Camera available or scanning is stopped.</Text>
       )}
-
-      {/* Render the bounding boxes */}
-      {
-        boxes.map((box, index) => (
-          <View
-            key={index}
-            style={[
-              styles.box,
-              {
-                left: box.x,
-                top: box.y,
-                width: box.width,
-                height: box.height,
-              },
-            ]}
-          />
+      <Svg>
+        {boxes.map((box, index) => (
+          <Path key={index} d={`M${box.polygonPath}Z`} fill="transparent" stroke="#aaff00" strokeWidth={5} />
         ))}
-
-      {/* White overlay for unique codes */}
+      </Svg>
       <View style={styles.overlay}>
         <Text style={styles.overlayTitle}>Scanned QR Codes</Text>
         <FlatList
@@ -140,23 +119,6 @@ export default function App(): React.ReactNode {
             </View>
           )}
         />
-        {/* Start and Stop Buttons */}
-        {/* <View style={styles.buttonRow}>
-          <Button
-            title="Start"
-            onPress={() => setIsScanning(true)}
-            disabled={isScanning} // Disable the Start button if already scanning
-          />
-          <Button
-            title="Stop"
-            onPress={() => {
-              setIsScanning(false);
-              setBoxes([]);
-              setUniqueCodes([]);
-            }}
-            disabled={!isScanning} // Disable the Stop button if not scanning
-          />
-        </View> */}
         <View style={styles.buttonRow}>
           {isScanning ? (
             <Button title="Stop" onPress={() => setIsScanning(false)} />
