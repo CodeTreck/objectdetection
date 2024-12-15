@@ -8,6 +8,7 @@ import {
   useCodeScanner,
 } from 'react-native-vision-camera';
 import { Svg, Path, Circle } from 'react-native-svg';
+import { Platform } from 'react-native';
 export default function App(): React.ReactNode {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
@@ -40,12 +41,18 @@ export default function App(): React.ReactNode {
 
         if (codes.length > 0) {
           const startTime = Date.now();
-          console.log(codes.length);
+
           // Update the bounding boxes for the current frame
           const newBoxes = codes.map((code) => {
             const polygonPath = code.corners
-              .map((vertex) => `${(vertex.x * screenWidthPixelsRounded / frame.height) / pixelRatio},${(vertex.y * screenHeightPixelsRounded / frame.width) / pixelRatio} `)
-              .join(' ');
+            .map((vertex) => {
+              if (Platform.OS === 'android') {
+                return `${(vertex.x * screenWidthPixelsRounded / frame.height) / pixelRatio},${(vertex.y * screenHeightPixelsRounded / frame.width) / pixelRatio} `;
+              } else {
+                return `${(vertex.y * screenWidthPixelsRounded / frame.height) / pixelRatio},${(vertex.x * screenHeightPixelsRounded / frame.width) / pixelRatio} `;
+              }
+            })
+            .join(' ');
             const corners = code.corners
               .map((corner) => {
                 return {
